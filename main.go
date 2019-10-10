@@ -87,3 +87,12 @@ func checkSig(msg, sig []byte) (bool, error) {
 	same := hmac.Equal(newSig, sig)
 	return same, nil
 }
+
+func createToken(c *UserClaims) (string, error) {
+	t := jwt.NewWithClaims(jwt.SigningMethodHS512, c)
+	signedToken, err := t.SignedString(key)
+	if err != nil {
+		return "", fmt.Errorf("Error in createToken when signing token: %w", err)
+	}
+	return signedToken, nil
+}
