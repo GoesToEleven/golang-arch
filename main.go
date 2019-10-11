@@ -5,6 +5,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"fmt"
+	"io"
 	"log"
 
 	"golang.org/x/crypto/bcrypt"
@@ -20,14 +21,22 @@ func main() {
 	}
 	bs = bs[:16]
 
-	rslt, err := enDecode(bs, msg)
+
+	wtr := &bytes.Buffer{}
+	encWriter, err := encryptWriter(wtr, bs)
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	fmt.Println("before base64", string(rslt))
+	_, err = io.WriteString(encWriter, msg)
+	if err != nil {
+		log.Fatalln(err)
+	}
 
-	rslt2, err := enDecode(bs, string(rslt))
+	encrypted := wtr.String()
+	fmt.Println("before base64", encrypted)
+
+	rslt2, err := enDecode(bs, encrypted)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -57,4 +66,21 @@ func enDecode(key []byte, input string) ([]byte, error) {
 
 	return buff.Bytes(), nil
 
+}
+
+func encryptWriter(wtr io.Writer, key []byte) (io.Writer, error) {
+	b, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("couldn't newCipher %w", err)
+	}
+
+	//initialization vector
+	iv := make([]byte, aes.BlockSize)
+
+	s := cipher.NewCTR(b, iv)
+
+	return cipher.StreamWriter{
+		S: s,
+		W: wtr,
+	}, nil
 }
