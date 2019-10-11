@@ -1,45 +1,31 @@
 package main
 
 import (
-	"bytes"
-	"crypto/aes"
-	"crypto/cipher"
+	"encoding/base64"
 	"fmt"
+	"log"
 )
 
 func main() {
-	key := []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
-	encrypted, err := encrypt([]byte("Hello World!"), key)
-	if err != nil {
-		panic(err)
-	}
+	msg := "This is totally fun get hands-on and learning it from the ground up. Thank you for sharing this info with me and helping me learn!"
+	encoded := encode(msg)
+	fmt.Println("ENCODED MSG", encoded)
 
-	fmt.Println(string(encrypted))
-
-	decrypted, err := encrypt(encrypted, key)
+	s, err := decode(encoded)
 	if err != nil {
-		panic(err)
+		log.Println(err)
 	}
-	fmt.Println(string(decrypted))
+	fmt.Println("DECODED MSG", s)
 }
 
-func encrypt(message, key []byte) ([]byte, error) {
-	block, err := aes.NewCipher(key)
+func encode(msg string) string {
+	return base64.URLEncoding.EncodeToString([]byte(msg))
+}
+
+func decode(encoded string) (string, error) {
+	s, err := base64.URLEncoding.DecodeString(encoded)
 	if err != nil {
-		return nil, fmt.Errorf("Error in encryption: %w", err)
+		return "", fmt.Errorf("couldn't decode string %w", err)
 	}
-
-	stream := cipher.NewOFB(block, make([]byte, aes.BlockSize))
-	buf := &bytes.Buffer{}
-	wtr := cipher.StreamWriter{
-		S: stream,
-		W: buf,
-	}
-
-	_, err = wtr.Write(message)
-	if err != nil {
-		return nil, fmt.Errorf("Error in encryption: %w", err)
-	}
-
-	return buf.Bytes(), err
+	return string(s), nil
 }
