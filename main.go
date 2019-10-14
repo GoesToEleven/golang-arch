@@ -1,40 +1,53 @@
 package main
 
 import (
-	"crypto/sha256"
-	"fmt"
 	"io"
-	"log"
-	"os"
+	"net/http"
 )
 
 func main() {
-	f, err := os.Open("sample-file.txt")
-	if err != nil {
-		log.Fatalln(err)
+	http.HandleFunc("/", foo)
+	http.HandleFunc("/submit", bar)
+	http.ListenAndServe(":8080", nil)
+}
+
+func getCode(msg string) string {
+	
+}
+
+func bar(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
 	}
-	defer f.Close()
 
-	h := sha256.New()
-
-	_, err = io.Copy(h, f)
-	if err != nil {
-		log.Fatalln("couldn't io.copy", err)
+	email := r.FormValue("email")
+	if email == "" {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
 	}
 
+	c := http.Cookie{
+		Name: "session",
+		Value: "",
+	}
+}
 
-	fmt.Printf("here's the type BEFORE Sum: %T\n", h)
-	fmt.Printf("%v\n", h)
-	xb := h.Sum(nil)
-	fmt.Printf("here's the type AFTER Sum: %T\n", xb)
-	fmt.Printf("%x\n", xb)
-
-	xb = h.Sum(nil)
-	fmt.Printf("here's the type AFTER SECOND Sum: %T\n", xb)
-	fmt.Printf("%x\n", xb)
-
-	xb = h.Sum(xb)
-	fmt.Printf("here's the type AFTER THIRD Sum and passing in xb: %T\n", xb)
-	fmt.Printf("%x\n", xb)
-
+func foo(w http.ResponseWriter, r *http.Request) {
+	html := `<!DOCTYPE html>
+	<html lang="en">
+	<head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<meta http-equiv="X-UA-Compatible" content="ie=edge">
+		<title>HMAC Example</title>
+	</head>
+	<body>
+		<form action="/submit" method="post">
+			<input type="email" name="email" />
+			<input type="submit" />
+		</form>
+	</body>
+	</html>`
+	io.WriteString(w, html)
 }
