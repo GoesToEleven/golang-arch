@@ -15,14 +15,14 @@ func main() {
 	http.ListenAndServe(":8080", nil)
 }
 
+type myClaims struct {
+	jwt.StandardClaims
+	Email string
+}
+
+const myKey = "i love thursdays when it rains 8723 inches"
+
 func getJWT(msg string) (string, error) {
-	myKey := "i love thursdays when it rains 8723 inches"
-
-	type myClaims struct {
-		jwt.StandardClaims
-		Email string
-	}
-
 	claims := myClaims{
 		StandardClaims: jwt.StandardClaims{
 			ExpiresAt: time.Now().Add(5 * time.Minute).Unix(),
@@ -72,11 +72,32 @@ func foo(w http.ResponseWriter, r *http.Request) {
 		c = &http.Cookie{}
 	}
 
-	//	isEqual := true
+	ss := c.Value
+	afterVerificationToken, err := jwt.ParseWithClaims(ss, &myClaims{}, func(beforeVeritificationToken *jwt.Token) (interface{}, error) {
+		return []byte(myKey), nil
+	})
+
+	// StandardClaims has the ...
+	// Valid() error
+	// ... method which means it implements the Claims interface ...
+	/*
+			type Claims interface {
+		    	Valid() error
+			}
+	*/
+	// ... when you ParseWithClaims ...
+	// the Valid() method gets run
+	// ... and if all is well, then returns no "error" and
+	// type TOKEN which has a field VALID will be true
+
+	isEqual := afterVerificationToken.Valid && err == nil
 
 	message := "Not logged in"
 	if isEqual {
 		message = "Logged in"
+		claims := afterVerificationToken.Claims.(*myClaims)
+		fmt.Println(claims.Email)
+		fmt.Println(claims.ExpiresAt)
 	}
 
 	html := `<!DOCTYPE html>
