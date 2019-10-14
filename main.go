@@ -1,86 +1,40 @@
 package main
 
 import (
-	"bytes"
-	"crypto/aes"
-	"crypto/cipher"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"log"
-
-	"golang.org/x/crypto/bcrypt"
+	"os"
 )
 
 func main() {
-	msg := "This is totally fun get hands-on and learning it from the ground up. Thank you for sharing this info with me and helping me learn!"
-
-	password := "ilovedogs"
-	bs, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.MinCost)
-	if err != nil {
-		log.Fatalln("couldn't bcrypt password", err)
-	}
-	bs = bs[:16]
-
-
-	wtr := &bytes.Buffer{}
-	encWriter, err := encryptWriter(wtr, bs)
+	f, err := os.Open("sample-file.txt")
 	if err != nil {
 		log.Fatalln(err)
 	}
+	defer f.Close()
 
-	_, err = io.WriteString(encWriter, msg)
+	h := sha256.New()
+
+	_, err = io.Copy(h, f)
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatalln("couldn't io.copy", err)
 	}
 
-	encrypted := wtr.String()
-	fmt.Println("before base64", encrypted)
 
-	rslt2, err := enDecode(bs, encrypted)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	fmt.Println(string(rslt2))
-}
+	fmt.Printf("here's the type BEFORE Sum: %T\n", h)
+	fmt.Printf("%v\n", h)
+	xb := h.Sum(nil)
+	fmt.Printf("here's the type AFTER Sum: %T\n", xb)
+	fmt.Printf("%x\n", xb)
 
-func enDecode(key []byte, input string) ([]byte, error) {
-	b, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, fmt.Errorf("couldn't newCipher %w", err)
-	}
+	xb = h.Sum(nil)
+	fmt.Printf("here's the type AFTER SECOND Sum: %T\n", xb)
+	fmt.Printf("%x\n", xb)
 
-	//initialization vector
-	iv := make([]byte, aes.BlockSize)
+	xb = h.Sum(xb)
+	fmt.Printf("here's the type AFTER THIRD Sum and passing in xb: %T\n", xb)
+	fmt.Printf("%x\n", xb)
 
-	s := cipher.NewCTR(b, iv)
-
-	buff := &bytes.Buffer{}
-	sw := cipher.StreamWriter{
-		S: s,
-		W: buff,
-	}
-	_, err = sw.Write([]byte(input))
-	if err != nil {
-		return nil, fmt.Errorf("couldn't sw.Write to streamwriter %w", err)
-	}
-
-	return buff.Bytes(), nil
-
-}
-
-func encryptWriter(wtr io.Writer, key []byte) (io.Writer, error) {
-	b, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, fmt.Errorf("couldn't newCipher %w", err)
-	}
-
-	//initialization vector
-	iv := make([]byte, aes.BlockSize)
-
-	s := cipher.NewCTR(b, iv)
-
-	return cipher.StreamWriter{
-		S: s,
-		W: wtr,
-	}, nil
 }
