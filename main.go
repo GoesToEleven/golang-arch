@@ -10,10 +10,14 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
+// key is email, value is password
 var db = map[string][]byte{}
+var sessions = map[string]string{}
+
 var key = []byte("my secret key 007 james bond rule the world from my mom's basement")
 
 func main() {
@@ -24,6 +28,24 @@ func main() {
 }
 
 func index(w http.ResponseWriter, r *http.Request) {
+	c, err := r.Cookie("sessionID")
+	if err != nil {
+		c = &http.Cookie{
+			Name:  "sessionID",
+			Value: "",
+		}
+	}
+
+	s, err := parseToken(c.Value)
+	if err != nil {
+		log.Println("index parseToken", err)
+	}
+
+	var e string
+	if s != "" {
+		e = sessions[s]
+	}
+
 	errMsg := r.FormValue("msg")
 
 	fmt.Fprintf(w, `<!DOCTYPE html>
@@ -35,7 +57,8 @@ func index(w http.ResponseWriter, r *http.Request) {
 		<title>Document</title>
 	</head>
 	<body>
-        <h1>IF THERE IS ANY MESSAGE FOR YOU, HERE IT IS: %s</h1>
+	<h1>IF YOU HAVE A SESSION, HERE IS YOUR EMAIL: %s</h1>
+	<h1>IF THERE IS ANY MESSAGE FOR YOU, HERE IT IS: %s</h1>
         <h1>REGISTER</h1>
 		<form action="/register" method="POST">
 			<input type="email" name="e">
@@ -49,7 +72,7 @@ func index(w http.ResponseWriter, r *http.Request) {
 			<input type="submit">
         </form>
 	</body>
-	</html>`, errMsg)
+	</html>`, e, errMsg)
 }
 
 func register(w http.ResponseWriter, r *http.Request) {
@@ -119,6 +142,17 @@ func login(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/?msg="+msg, http.StatusSeeOther)
 		return
 	}
+
+	sUUID := uuid.New().String()
+	sessions[sUUID] = e
+	token := createToken(sUUID)
+
+	c := http.Cookie{
+		Name:  "sessionID",
+		Value: token,
+	}
+
+	http.SetCookie(w, &c)
 
 	msg := url.QueryEscape("you logged in " + e)
 	http.Redirect(w, r, "/?msg="+msg, http.StatusSeeOther)
