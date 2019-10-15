@@ -7,10 +7,13 @@
 		<title>Document</title>
 	</head>
 	<body>
-        <h1>IF THERE WAS ANY ERROR, HERE IT IS: %s</h1>
+	<h1>IF YOU HAVE A SESSION, HERE IS YOUR EMAIL: %s</h1>
+	<h1>IF THERE IS ANY MESSAGE FOR YOU, HERE IT IS: %s</h1>
         <h1>REGISTER</h1>
 		<form action="/register" method="POST">
-			<input type="email" name="e">
+		<label for="first">First</label>
+		<input type="text" name="first" placeholder="First" id="first">
+		<input type="email" name="e">
 			<input type="password" name="p">
 			<input type="submit">
         </form>
