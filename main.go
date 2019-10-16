@@ -1,15 +1,14 @@
 package main
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"net/url"
-	"strings"
+	"time"
 
+	"github.com/dgrijalva/jwt-go"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -17,6 +16,11 @@ import (
 type user struct {
 	password []byte
 	First    string
+}
+
+type customClaims struct {
+	jwt.StandardClaims
+	SID string
 }
 
 // key is email, value is user
@@ -41,19 +45,19 @@ func index(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	s, err := parseToken(c.Value)
+	sID, err := parseToken(c.Value)
 	if err != nil {
 		log.Println("index parseToken", err)
 	}
 
 	var e string
-	if s != "" {
-		e = sessions[s]
+	if sID != "" {
+		e = sessions[sID]
 	}
 
 	var f string
 	if user, ok := db[e]; ok {
-		f = user.First 
+		f = user.First
 	}
 
 	errMsg := r.FormValue("msg")
@@ -109,7 +113,6 @@ func register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-
 	f := r.FormValue("first")
 	if f == "" {
 		msg := url.QueryEscape("your first name needs to not be empty")
@@ -127,7 +130,7 @@ func register(w http.ResponseWriter, r *http.Request) {
 	log.Println("bcrypted", bsp)
 	db[e] = user{
 		password: bsp,
-		First: f,
+		First:    f,
 	}
 
 	http.Redirect(w, r, "/", http.StatusSeeOther)
@@ -169,7 +172,13 @@ func login(w http.ResponseWriter, r *http.Request) {
 
 	sUUID := uuid.New().String()
 	sessions[sUUID] = e
-	token := createToken(sUUID)
+	token, err := createToken(sUUID)
+	if err != nil {
+		log.Println("couldn't createToken in login", err)
+		msg := url.QueryEscape("our server didn't get enough lunch and is not working 200% right now. Try bak later")
+		http.Redirect(w, r, "/?msg="+msg, http.StatusSeeOther)
+		return
+	}
 
 	c := http.Cookie{
 		Name:  "sessionID",
@@ -182,41 +191,38 @@ func login(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/?msg="+msg, http.StatusSeeOther)
 }
 
-func createToken(sid string) string {
-	mac := hmac.New(sha256.New, key)
-	mac.Write([]byte(sid))
+func createToken(sid string) (string, error) {
 
-	// to hex
-	// signedMac := fmt.Sprintf("%x", mac.Sum(nil))
+	cc := customClaims{
+		StandardClaims: jwt.StandardClaims{
+			ExpiresAt: time.Now().Add(5 * time.Minute).Unix(),
+		},
+		SID: sid,
+	}
 
-	// to base64
-	signedMac := base64.StdEncoding.EncodeToString(mac.Sum(nil))
-
-	// signedSessionID as base64 | created from sid
-	return signedMac + "|" + sid
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, cc)
+	st, err := token.SignedString(key)
+	if err != nil {
+		return "", fmt.Errorf("couldn't sign token in createToken %w", err)
+	}
+	return st, nil
 }
 
-func parseToken(ss string) (string, error) {
-	xs := strings.SplitN(ss, "|", 2)
-	if len(xs) != 2 {
-		return "", fmt.Errorf("stop hacking me wrong number of items in string parsetoken")
-	}
+func parseToken(st string) (string, error) {
+	token, err := jwt.ParseWithClaims(st, &customClaims{}, func(t *jwt.Token) (interface{}, error) {
+		if t.Method.Alg() != jwt.SigningMethodHS256.Alg() {
+			return nil, errors.New("parseWithClaims different algorithms used")
+		}
+		return key, nil
+	})
 
-	// SIGNEDSESSIONID AS BASE64 | created from sid
-	b64 := xs[0]
-	xb, err := base64.StdEncoding.DecodeString(b64)
 	if err != nil {
-		return "", fmt.Errorf("couldn't parseToken decodestring %w", err)
+		return "", fmt.Errorf("couldn't ParseWithClaims in parseToken %w", err)
 	}
 
-	// signedSessionID as base64 | CREATED FROM SID
-	mac := hmac.New(sha256.New, key)
-	mac.Write([]byte(xs[1]))
-
-	ok := hmac.Equal(xb, mac.Sum(nil))
-	if !ok {
-		return "", fmt.Errorf("couldn't parseToken not equal signed sid and sid")
+	if !token.Valid {
+		return "", fmt.Errorf("token not valid in parseToken")
 	}
 
-	return xs[1], nil
+	return token.Claims.(*customClaims).SID, nil
 }
