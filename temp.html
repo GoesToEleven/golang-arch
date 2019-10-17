@@ -1,27 +1,14 @@
 <!DOCTYPE html>
-	<html lang="en">
-	<head>
-		<meta charset="UTF-8">
-		<meta name="viewport" content="width=device-width, initial-scale=1.0">
-		<meta http-equiv="X-UA-Compatible" content="ie=edge">
-		<title>Document</title>
-	</head>
-	<body>
-	<h1>IF YOU HAVE A SESSION, HERE IS YOUR EMAIL: %s</h1>
-	<h1>IF THERE IS ANY MESSAGE FOR YOU, HERE IT IS: %s</h1>
-        <h1>REGISTER</h1>
-		<form action="/register" method="POST">
-		<label for="first">First</label>
-		<input type="text" name="first" placeholder="First" id="first">
-		<input type="email" name="e">
-			<input type="password" name="p">
-			<input type="submit">
-        </form>
-        <h1>LOG IN</h1>
-        <form action="/login" method="POST">
-            <input type="email" name="e">
-			<input type="password" name="p">
-			<input type="submit">
-        </form>
-	</body>
-	</html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta http-equiv="X-UA-Compatible" content="ie=edge">
+	<title>Document</title>
+</head>
+<body>
+	<form action="/logout" method="POST">
+		<input type="submit" value="LOGOUT">
+	</form>
+</body>
+</html>
