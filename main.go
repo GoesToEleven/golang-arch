@@ -5,14 +5,25 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/amazon"
 )
 
 type user struct {
 	password []byte
 	First    string
+}
+
+var oauth = &oauth2.Config{
+	ClientID:     "amzn1.application-oa2-client.8373043df3454d6e96594d1c99ab6103",
+	ClientSecret: "aa3b51fb6989812bdb7f9cd393c9f930ea48c742e27634e46b11828e6804f43e",
+	Endpoint:     amazon.Endpoint,
+	RedirectURL:  "http://localhost:8080/oauth/amazon/receive",
+	Scopes:       []string{"profile"},
 }
 
 // key is email, value is user
@@ -21,10 +32,14 @@ var db = map[string]user{}
 // key is sessionid, value is email
 var sessions = map[string]string{}
 
+// key is uuid from oauth login, value is expiration time
+var oauthExp = map[string]time.Time{}
+
 func main() {
 	http.HandleFunc("/", index)
 	http.HandleFunc("/register", register)
 	http.HandleFunc("/login", login)
+	http.HandleFunc("/oauth/amazon/login", oAmazonLogin)
 	http.HandleFunc("/logout", logout)
 	http.ListenAndServe(":8080", nil)
 }
@@ -80,6 +95,10 @@ func index(w http.ResponseWriter, r *http.Request) {
             <input type="email" name="e">
 			<input type="password" name="p">
 			<input type="submit">
+		</form>
+        <h1>LOG IN WITH AMAZON</h1>
+        <form action="/oauth/amazon/login" method="POST">
+			<input type="submit" value="LOGIN WITH AMAZON">
 		</form>
 		<h1>LOGOUT</h1>
 		<form action="/logout" method="POST">
@@ -213,4 +232,17 @@ func logout(w http.ResponseWriter, r *http.Request) {
 
 	http.SetCookie(w, c)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+func oAmazonLogin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+
+	id := uuid.New().String()
+	oauthExp[id] = time.Now().Add(time.Hour)
+
+	// here we redirect to amazon at the AuthURL endpoint
+	http.Redirect(w, r, oauth.AuthCodeURL(id), http.StatusSeeOther)
 }
