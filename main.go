@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -40,6 +42,8 @@ func main() {
 	http.HandleFunc("/register", register)
 	http.HandleFunc("/login", login)
 	http.HandleFunc("/oauth/amazon/login", oAmazonLogin)
+	// notice this is your "redirect" URL listed above in oauth2.Config
+	http.HandleFunc("/oauth/amazon/receive", oAmazonReceive)
 	http.HandleFunc("/logout", logout)
 	http.ListenAndServe(":8080", nil)
 }
@@ -245,4 +249,68 @@ func oAmazonLogin(w http.ResponseWriter, r *http.Request) {
 
 	// here we redirect to amazon at the AuthURL endpoint
 	http.Redirect(w, r, oauth.AuthCodeURL(id), http.StatusSeeOther)
+}
+
+func oAmazonReceive(w http.ResponseWriter, r *http.Request) {
+	state := r.FormValue("state")
+	if state == "" {
+		msg := url.QueryEscape("state was empty in oAmazonReceive")
+		http.Redirect(w, r, "/?msg="+msg, http.StatusSeeOther)
+		return
+	}
+
+	// we got this code from amazon
+	code := r.FormValue("code")
+	if code == "" {
+		msg := url.QueryEscape("code was empty in oAmazonReceive")
+		http.Redirect(w, r, "/?msg="+msg, http.StatusSeeOther)
+		return
+	}
+
+	expT := oauthExp[state]
+	if time.Now().After(expT) {
+		msg := url.QueryEscape("oauth took too long time.now.after")
+		http.Redirect(w, r, "/?msg="+msg, http.StatusSeeOther)
+		return
+	}
+
+	// exchange our code for a token
+	// this uses the client secret also
+	// the TokenURL is called
+	// we get back a token
+	t, err := oauth.Exchange(r.Context(), code)
+	if err != nil {
+		msg := url.QueryEscape("couldn't do oauth exchange: " + err.Error())
+		http.Redirect(w, r, "/?msg="+msg, http.StatusSeeOther)
+		return
+	}
+
+	ts := oauth.TokenSource(r.Context(), t)
+	c := oauth2.NewClient(r.Context(), ts)
+
+	resp, err := c.Get("https://api.amazon.com/user/profile")
+	if err != nil {
+		msg := url.QueryEscape("couldn't get at amazon: " + err.Error())
+		http.Redirect(w, r, "/?msg="+msg, http.StatusSeeOther)
+		return
+	}
+	defer resp.Body.Close()
+
+	bs, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		msg := url.QueryEscape("couldn't read resp body: " + err.Error())
+		http.Redirect(w, r, "/?msg="+msg, http.StatusSeeOther)
+		return
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		msg := url.QueryEscape("not a 200 resp code: " + string(bs))
+		http.Redirect(w, r, "/?msg="+msg, http.StatusSeeOther)
+		return
+	}
+
+	fmt.Println(string(bs))
+
+	// fmt.Fprint(w, string(bs))
+	io.WriteString(w, string(bs))
 }
