@@ -1,9 +1,8 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -29,13 +28,20 @@ var oauth = &oauth2.Config{
 }
 
 // key is email, value is user
-var db = map[string]user{}
+var db = map[string]user{
+	"test@example.com": user{
+		First: "testFirstName",
+	},
+}
 
 // key is sessionid, value is email
 var sessions = map[string]string{}
 
 // key is uuid from oauth login, value is expiration time
 var oauthExp = map[string]time.Time{}
+
+// key is uid from oauth provider; value is user id, eg, email
+var oauthConnections = map[string]string{}
 
 func main() {
 	http.HandleFunc("/", index)
@@ -190,9 +196,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sUUID := uuid.New().String()
-	sessions[sUUID] = e
-	token, err := createToken(sUUID)
+	err = createSession(e, w)
 	if err != nil {
 		log.Println("couldn't createToken in login", err)
 		msg := url.QueryEscape("our server didn't get enough lunch and is not working 200% right now. Try bak later")
@@ -200,15 +204,26 @@ func login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	msg := url.QueryEscape("you logged in " + e)
+	http.Redirect(w, r, "/?msg="+msg, http.StatusSeeOther)
+}
+
+func createSession(e string, w http.ResponseWriter) error {
+	sUUID := uuid.New().String()
+	sessions[sUUID] = e
+	token, err := createToken(sUUID)
+	if err != nil {
+		return fmt.Errorf("couldn't createtoken in createSession %w", err)
+	}
+
 	c := http.Cookie{
 		Name:  "sessionID",
 		Value: token,
+		Path:  "/",
 	}
 
 	http.SetCookie(w, &c)
-
-	msg := url.QueryEscape("you logged in " + e)
-	http.Redirect(w, r, "/?msg="+msg, http.StatusSeeOther)
+	return nil
 }
 
 func logout(w http.ResponseWriter, r *http.Request) {
@@ -248,6 +263,7 @@ func oAmazonLogin(w http.ResponseWriter, r *http.Request) {
 	oauthExp[id] = time.Now().Add(time.Hour)
 
 	// here we redirect to amazon at the AuthURL endpoint
+	// adds state, scope, clientid
 	http.Redirect(w, r, oauth.AuthCodeURL(id), http.StatusSeeOther)
 }
 
@@ -296,21 +312,45 @@ func oAmazonReceive(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	bs, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		msg := url.QueryEscape("couldn't read resp body: " + err.Error())
-		http.Redirect(w, r, "/?msg="+msg, http.StatusSeeOther)
-		return
-	}
-
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		msg := url.QueryEscape("not a 200 resp code: " + string(bs))
+		msg := url.QueryEscape("not a 200 resp code")
 		http.Redirect(w, r, "/?msg="+msg, http.StatusSeeOther)
 		return
 	}
 
-	fmt.Println(string(bs))
+	type profileResponse struct {
+		Email  string `json:"email"`
+		Name   string `json:"name"`
+		UserID string `json:"user_id"`
+	}
 
-	// fmt.Fprint(w, string(bs))
-	io.WriteString(w, string(bs))
+	var pr profileResponse
+
+	err = json.NewDecoder(resp.Body).Decode(&pr)
+	if err != nil {
+		msg := url.QueryEscape("not able to decode json response")
+		http.Redirect(w, r, "/?msg="+msg, http.StatusSeeOther)
+		return
+	}
+
+	// check to see if they have already registered at our site with this oauth2
+	// key is uid from oauth provider; value is user id, eg, email
+	eml, ok := oauthConnections[pr.UserID]
+
+	if !ok {
+		// not regiestered at our site yet with amazon
+		// register at our site with amazon
+		eml = "test@example.com"
+	}
+
+	err = createSession(eml, w)
+	if err != nil {
+		log.Println("couldn't createToken in oAmazonReceive", err)
+		msg := url.QueryEscape("our server didn't get enough lunch and is not working 200% right now. Try bak later")
+		http.Redirect(w, r, "/?msg="+msg, http.StatusSeeOther)
+		return
+	}
+
+	msg := url.QueryEscape("you logged in " + eml)
+	http.Redirect(w, r, "/?msg="+msg, http.StatusSeeOther)
 }
