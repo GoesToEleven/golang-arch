@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Document</title>
+</head>
+<body>
+    <form action="/oauth/amazon/register" method="POST">
+
+    <label for="firstName">FIRST NAME</label>
+    <input type="text" name="first" id="firstName" value="%s">
+
+    <label for="Email">EMAIL</label>
+    <input type="text" name="email" id="Email" value="%s">
+
+    <input type="hidden" value="%s" name="oauthID">
+    
+    <input type="submit">
+    </form>
+</body>
+</html>

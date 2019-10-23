@@ -28,11 +28,7 @@ var oauth = &oauth2.Config{
 }
 
 // key is email, value is user
-var db = map[string]user{
-	"test@example.com": user{
-		First: "testFirstName",
-	},
-}
+var db = map[string]user{}
 
 // key is sessionid, value is email
 var sessions = map[string]string{}
@@ -50,6 +46,7 @@ func main() {
 	http.HandleFunc("/oauth/amazon/login", oAmazonLogin)
 	// notice this is your "redirect" URL listed above in oauth2.Config
 	http.HandleFunc("/oauth/amazon/receive", oAmazonReceive)
+	http.HandleFunc("/partial-register", partialRegister)
 	http.HandleFunc("/logout", logout)
 	http.ListenAndServe(":8080", nil)
 }
@@ -340,12 +337,25 @@ func oAmazonReceive(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		// not regiestered at our site yet with amazon
 		// register at our site with amazon
-		eml = "test@example.com"
+		st, err := createToken(pr.UserID)
+		if err != nil {
+			log.Println("couldn't createToken in oAmazonReceive", err)
+			msg := url.QueryEscape("our server didn't get enough lunch and is not working 200% right now. Try bak later")
+			http.Redirect(w, r, "/?msg="+msg, http.StatusSeeOther)
+			return
+		}
+
+		uv := url.Values{}
+		uv.Add("sst", st)
+		uv.Add("name", pr.Name)
+		uv.Add("email", pr.Email)
+		http.Redirect(w, r, "/partial-register?"+uv.Encode(), http.StatusSeeOther)
+		return
 	}
 
 	err = createSession(eml, w)
 	if err != nil {
-		log.Println("couldn't createToken in oAmazonReceive", err)
+		log.Println("couldn't createSession in oAmazonReceive", err)
 		msg := url.QueryEscape("our server didn't get enough lunch and is not working 200% right now. Try bak later")
 		http.Redirect(w, r, "/?msg="+msg, http.StatusSeeOther)
 		return
@@ -353,4 +363,42 @@ func oAmazonReceive(w http.ResponseWriter, r *http.Request) {
 
 	msg := url.QueryEscape("you logged in " + eml)
 	http.Redirect(w, r, "/?msg="+msg, http.StatusSeeOther)
+}
+
+func partialRegister(w http.ResponseWriter, r *http.Request) {
+	sst := r.FormValue("sst")
+	name := r.FormValue("name")
+	email := r.FormValue("email")
+
+	if sst == "" {
+		log.Println("couldn't get sst in partialRegister")
+		msg := url.QueryEscape("our server didn't get enough lunch and is not working 200% right now. Try bak later")
+		http.Redirect(w, r, "/?msg="+msg, http.StatusSeeOther)
+		return
+	}
+
+
+	fmt.Fprintf(w, `<!DOCTYPE html>
+	<html lang="en">
+	<head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<meta http-equiv="X-UA-Compatible" content="ie=edge">
+		<title>Document</title>
+	</head>
+	<body>
+		<form action="/oauth/amazon/register" method="POST">
+	
+		<label for="firstName">FIRST NAME</label>
+		<input type="text" name="first" id="firstName" value="%s">
+	
+		<label for="Email">EMAIL</label>
+		<input type="text" name="email" id="Email" value="%s">
+	
+		<input type="hidden" value="%s" name="oauthID">
+		
+		<input type="submit">
+		</form>
+	</body>
+	</html>`, name, email, sst)
 }
