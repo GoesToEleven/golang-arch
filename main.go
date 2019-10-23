@@ -47,6 +47,7 @@ func main() {
 	// notice this is your "redirect" URL listed above in oauth2.Config
 	http.HandleFunc("/oauth/amazon/receive", oAmazonReceive)
 	http.HandleFunc("/partial-register", partialRegister)
+	http.HandleFunc("/oauth/amazon/register", oAmazonRegister)
 	http.HandleFunc("/logout", logout)
 	http.ListenAndServe(":8080", nil)
 }
@@ -195,7 +196,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 
 	err = createSession(e, w)
 	if err != nil {
-		log.Println("couldn't createToken in login", err)
+		log.Println("couldn't createSession in login", err)
 		msg := url.QueryEscape("our server didn't get enough lunch and is not working 200% right now. Try bak later")
 		http.Redirect(w, r, "/?msg="+msg, http.StatusSeeOther)
 		return
@@ -377,7 +378,6 @@ func partialRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-
 	fmt.Fprintf(w, `<!DOCTYPE html>
 	<html lang="en">
 	<head>
@@ -401,4 +401,60 @@ func partialRegister(w http.ResponseWriter, r *http.Request) {
 		</form>
 	</body>
 	</html>`, name, email, sst)
+}
+
+func oAmazonRegister(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		msg := url.QueryEscape("your method was not post")
+		http.Redirect(w, r, "/?msg="+msg, http.StatusSeeOther)
+		return
+	}
+
+	f := r.FormValue("first")
+	e := r.FormValue("email")
+	oauthID := r.FormValue("oauthID")
+
+	if f == "" {
+		msg := url.QueryEscape("your first name needs to not be empty")
+		http.Redirect(w, r, "/?msg="+msg, http.StatusSeeOther)
+		return
+	}
+
+	if e == "" {
+		msg := url.QueryEscape("your email needs to not be empty")
+		http.Redirect(w, r, "/?msg="+msg, http.StatusSeeOther)
+		return
+	}
+
+	if oauthID == "" {
+		log.Println("oauthID came through as empty at oAmazonRegister")
+		msg := url.QueryEscape("your oauthID needs to not be empty")
+		http.Redirect(w, r, "/?msg="+msg, http.StatusSeeOther)
+		return
+	}
+
+	amazonUID, err := parseToken(oauthID)
+	if err != nil {
+		log.Println("parseToken at oAmazonRegister didn't parse")
+		msg := url.QueryEscape("there was an issue. send us money so we can fix it.")
+		http.Redirect(w, r, "/?msg="+msg, http.StatusSeeOther)
+		return
+	}
+
+	db[e] = user{
+		First: f,
+	}
+
+	// key is uid from oauth provider; value is user id, eg, email
+	oauthConnections[amazonUID] = e
+
+	err = createSession(e, w)
+	if err != nil {
+		log.Println("couldn't CreateSession in oAmazonRegister", err)
+		msg := url.QueryEscape("our server didn't get enough lunch and is not working 200% right now. Try bak later")
+		http.Redirect(w, r, "/?msg="+msg, http.StatusSeeOther)
+		return
+	}
+
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
